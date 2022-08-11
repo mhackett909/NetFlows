@@ -8,13 +8,13 @@ class Extractor:
         self.method = method
         self.threshold = 2 # Min packets for flow analysis 
         # Options: ip.src, ip.dst, ip.proto, srcport, dstport
-        self.id_cols = ['ip.dst', 'ip.proto']
+        self.id_cols = ['ip.dst', 'dstport', 'ip.proto']
         # Can choose KB or MB
         self.bits_col = "KBits_Per_Sec" if style=="kb" else "MBits_Per_Sec"
         self.bytes_convert = 1e3 if style=="kb" else 1e6
         self.feature_cols = ['Pkts_Per_Sec', self.bits_col, 'Pkt_Size_Avg', 'Pkt_Size_Std', 'Pkt_Size_Q1', 'Pkt_Size_Q2', 'Pkt_Size_Q3', 
-                        'Pkt_Size_Min', 'Pkt_Size_Max', 'ACK_Sec', 'SYN_Sec', 'TTL_Avg']
-    def findCSVFiles(self):
+                        'Pkt_Size_Min', 'Pkt_Size_Max', 'SYN_Sec', 'TTL_Avg', 'Anomaly']
+    def findCSVFiles(self): 
         files = []
         for file in os.listdir(path):
             ext = file[-3:]
@@ -23,12 +23,13 @@ class Extractor:
         self.files = files
     def getCSVFiles(self):
         return self.files
+    def getIndices(self):
+        # Used to obtain number of subflows per flow
+        return self.subflow_indices
     def loadCSV(self, file):
         print(f"Loading: {file}")
         self.df = pd.read_csv(self.path+file)
         self.file = file
-    def getDF(self):
-        return self.df
     def dropNaN(self):
         print("Cleaning data...")
         df = self.df
@@ -162,6 +163,11 @@ class Extractor:
         new_keys = self.new_keys
         # Partition flows using subflow indices
         subflows = []
+        # For novel flow testing: Find suitable flows to designate as "novel"
+        # Use get_indices() to obtain number of subflows per flow
+        # List flow rows in novel_flows
+        novel_flows = [] 
+        novel_indices = []
         for i in range(len(subflow_indices)):
             next_key = str(new_keys[i])
             pkt_list = self.fid_dict[next_key] # Packets in this flow
@@ -170,9 +176,14 @@ class Extractor:
             for j in range(len(subflow_indices[i])):
                 next_end = subflow_indices[i][j] # Start of next subflow
                 subflows.append(pkt_list.loc[next_start:next_end][:-1]) # Exclude next_end
+                if i in novel_flows:
+                    novel_indices.append(len(subflows) - 1)
                 next_start = next_end
             subflows.append(pkt_list.loc[next_start:])
+            if i in novel_flows:
+                novel_indices.append(len(subflows) - 1)
         self.subflows = subflows
+        self.novel_indices = novel_indices
     def extractSubflowFeatures(self):
         print("Extracting subflow features...")
         subflow_features = []
@@ -210,14 +221,16 @@ class Extractor:
             sub_features.append(pkt_sizes.min())
             sub_features.append(pkt_sizes.max())
             # TCP Flags
-            ACK_mask = 16
             SYN_mask = 2
-            num_acks = ((subflow['tcp.flags'] & ACK_mask) > 0).sum()
             num_syns = ((subflow['tcp.flags'] & SYN_mask) > 0).sum()
-            sub_features.append(num_acks/subflow_dur)
             sub_features.append(num_syns/subflow_dur)
             # IP Avg TTL
             sub_features.append(subflow['ip.ttl'].mean())
+            # Anomaly column 
+            if i in self.novel_indices:
+                 sub_features.append(1)
+            else:
+                 sub_features.append(0)
             # Add sublist to main list
             subflow_features.append(sub_features)
         self.df_subflows = pd.DataFrame(subflow_features)
@@ -225,7 +238,6 @@ class Extractor:
     def generate_mal_subflows(self):
         print("Generating malicious subflows...")
         df_subflows = self.df_subflows
-        df_subflows['Malicious'] = 0
         # Number of malicious subflows to generate
         num_mal = np.ceil(df_subflows.shape[0] / 5).astype(int)
         malicious_subflows = []
@@ -233,7 +245,6 @@ class Extractor:
             malicious_subflows.append(self.mal_subflow())
         malicious_subflows = pd.DataFrame(malicious_subflows)
         malicious_subflows.columns = self.feature_cols
-        malicious_subflows['Malicious'] = 1
         # Concatenate normal subflows and malicious subflows
         data = [df_subflows, malicious_subflows]
         self.df_subflows = pd.concat(data)
@@ -245,7 +256,7 @@ class Extractor:
         pkts_sec = num_pkts/dur
         mal_features.append(pkts_sec)
         # Simple ping flood with same size packets (bytes)
-        pkt_size = 64 # Can be as high as 65,535 in IPv4
+        pkt_size = 5000 # 64-65,535 in IPv4
         total_size = pkt_size * num_pkts
         total_size /= self.bytes_convert
         bits_sec = (total_size * 8)/dur
@@ -254,9 +265,9 @@ class Extractor:
         mal_features.append(0) # no standard deviation for uniform sizes
         for i in range(5):
             mal_features.append(pkt_size)
-        mal_features.append(0) # No SYN or ACKs in ICMP ping
-        mal_features.append(0)
+        mal_features.append(0) # No TCP flags for ICMP ping
         mal_features.append(64) # Arbitrary TTL
+        mal_features.append(1) # Mark as anomaly
         return pd.Series(mal_features)
     def shuffleSubflows(self):
         self.df_subflows = self.df_subflows.sample(frac=1)
@@ -277,11 +288,12 @@ path = '/smallwork/m.hackett_local/data/ashley_pcaps/captures/csv/'
 #path = '/smallwork/m.hackett_local/data/modbus/clean/csv/' # Clean modbus
 #path = '/smallwork/m.hackett_local/data/modbus/pingFloodDDoS/csv/' # Attack modbus (ping flood)
 #path = '/smallwork/m.hackett_local/data/modbus/modbusQueryFlooding/csv/' # Attack modbus (query flood)
-#path = '/smallwork/m.hackett_local/data/modbus/tcpSYNFloodDDoS/csv/' # Attack modbus (query flood)
+#path = '/smallwork/m.hackett_local/data/modbus/tcpSYNFloodDDoS/csv/' # Attack modbus (syn flood)
 
 method = "timeout" #Options: "timeout" or "interval" (default)
 style = "mb" #Options: "kb" or "mb" (default)
 gen_malicious = True #Generate malicious subflows (5G data only)
+novel_flows = False # Need to finish implementing... need flow info function
 
 extractor = Extractor(path, method, style)
 extractor.findCSVFiles()
