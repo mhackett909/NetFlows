@@ -10,13 +10,13 @@ import absl.logging
 absl.logging.set_verbosity(absl.logging.ERROR)
 
 from tensorflow.keras.callbacks import ModelCheckpoint, TensorBoard, EarlyStopping
-from tensorflow.keras.layers import Dense, Layer, InputSpec, LeakyReLU
-from tensorflow.keras.models import load_model, Model
-from tensorflow.keras import Sequential, activations, initializers, constraints, regularizers, backend as K
+from tensorflow.keras.layers import Dense, Layer, LeakyReLU
+from tensorflow.keras.models import load_model
+from tensorflow.keras import Sequential, activations
 from tensorflow import matmul
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, confusion_matrix, recall_score, f1_score, precision_score
-from tensorflow.keras.constraints import UnitNorm, Constraint
+from tensorflow.keras.constraints import UnitNorm
 
 
 # In[1]:
@@ -29,20 +29,20 @@ df = pd.read_csv(path+file)
 df.info()
 
 features = df.iloc[0:,:-1].columns
-target = ['Malicious']
+target = ['Anomaly']
 
 X = df[features]
 y = df[target]
 
 print("Splitting data...")
 # Split data
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.3, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=.3, shuffle=False, random_state=42)
 
 # Create "clean" set for training (remove malicious subflows)
-clean_indices_train = y_train[y_train['Malicious'] == 0].index
+clean_indices_train = y_train[y_train['Anomaly'] == 0].index
 X_train_clean = X_train.loc[clean_indices_train]
 
-clean_indices_test = y_test[y_test['Malicious'] == 0].index
+clean_indices_test = y_test[y_test['Anomaly'] == 0].index
 X_test_clean = X_test.loc[clean_indices_test]
 
 # In[10]:
@@ -77,15 +77,15 @@ hidden_dim = input_dim - 1
 latent_dim = np.ceil(input_dim / 2)
 
 # Options
-model_name = 'autoencoder_5G_model16.tf'
+model_name = 'autoencoder_5G_model5.tf'
 
-#act1 = "relu"
-#act2 = "linear"
-act1 = act2 = LeakyReLU()
-#encoder_constraint = decoder_constraint = None
+act1 = "relu"
+act2 = "linear"
+#act1 = act2 = LeakyReLU()
+encoder_constraint = decoder_constraint = None
 
-encoder_constraint = UnitNorm(axis=0)
-decoder_constraint = UnitNorm(axis=1)
+#encoder_constraint = UnitNorm(axis=0)
+#decoder_constraint = UnitNorm(axis=1)
 
 opt = tf.keras.optimizers.Adam()
 opt = tfa.optimizers.Lookahead(opt)
@@ -100,12 +100,12 @@ latent = Dense(latent_dim,
                kernel_constraint=encoder_constraint)
 
 # Base Decoder 
-#hidden_2 = Dense(hidden_dim, activation=act1, kernel_constraint=decoder_constraint) 
-#out = Dense(input_dim, activation=act2, kernel_constraint=decoder_constraint)
+hidden_2 = Dense(hidden_dim, activation=act1, kernel_constraint=decoder_constraint) 
+out = Dense(input_dim, activation=act2, kernel_constraint=decoder_constraint)
 
 # Dense Transpose Decoder (Tied Weights)
-hidden_2 = DenseTranspose(latent, activation=act1)
-out = DenseTranspose(hidden_1, activation=act2)
+#hidden_2 = DenseTranspose(latent, activation=act1)
+#out = DenseTranspose(hidden_1, activation=act2)
 
 # Model
 autoencoder = Sequential()
@@ -175,20 +175,19 @@ plt.ylabel("Number of samples")
 plt.show()
 
 # In[6]
-'''
+
 # Calculate threshold by accounting for standard deviation
 mean = np.mean(train_mae_loss, axis=0)
 sd = np.std(train_mae_loss, axis=0)
-num_std = 3
+num_sd = 2
 
 # '2*sd' = ~97.5%, '1.76 = ~96%', '1.64 = ~95%'
-final_list = [x for x in train_mae_loss if (x > mean - num_std * sd)] 
-final_list = [x for x in final_list if (x < mean + num_std * sd)]
-print("max value after removing num_std*std:", np.max(final_list))
+final_list = [x for x in train_mae_loss if (x > mean - num_sd * sd)] 
+final_list = [x for x in final_list if (x < mean + num_sd * sd)]
+print("max value after removing 2*std:", np.max(final_list))
 sd_threshold = np.max(final_list)
 print("number of packets removed:", (len(train_mae_loss) - len(final_list)))
 print("number of packets before removal:", len(train_mae_loss))
-'''
 
 # In[7]:
 # X_test can be replaced with live data
@@ -199,7 +198,7 @@ test_mae_loss = np.mean(np.abs(test_x_predictions - X_test), axis=1)
 
 # Returns number of malicious (1) and normal (0) data points in test set
 
-accuracy_score(y_test, [1 if s > threshold else 0 for s in test_mae_loss])
+accuracy_score(y_test, [1 if s > sd_threshold else 0 for s in test_mae_loss])
 
 # In[8]:
 # Graph depicts threshold line and location of normal and malicious data
@@ -217,7 +216,7 @@ for name, group in groups:
     ax.plot(group.index, group.Reconstruction_error, 
             marker='o', ms=3.5, linestyle='', 
             label= "Malicious" if name == 1 else "Normal") 
-ax.hlines(threshold, ax.get_xlim()[0], ax.get_xlim()[1], colors="r", zorder=100, label='Threshold')
+ax.hlines(sd_threshold, ax.get_xlim()[0], ax.get_xlim()[1], colors="r", zorder=100, label='Threshold')
     
 ax.legend()
 plt.title("Reconstruction error for different classes")
@@ -228,12 +227,12 @@ plt.show()
 # In[9]:
 #Confusion Matrix heat map
 
-pred_y = [1 if e > threshold else 0 for e in error_df_test['Reconstruction_error'].values]
+pred_y = [1 if e > sd_threshold else 0 for e in error_df_test['Reconstruction_error'].values]
 conf_matrix = confusion_matrix(error_df_test['True_class'], pred_y) 
 plt.figure(figsize=(8, 6))
 sns.heatmap(conf_matrix,
-            xticklabels=["Normal","Malicious"], 
-            yticklabels=["Normal","Malicious"], 
+            xticklabels=["Normal","Anomaly"], 
+            yticklabels=["Normal","Anomaly"], 
             annot=True, fmt="d");
 plt.title("Confusion matrix")
 plt.ylabel('True class')
