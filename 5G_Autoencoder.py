@@ -77,15 +77,15 @@ hidden_dim = input_dim - 1
 latent_dim = np.ceil(input_dim / 2)
 
 # Options
-model_name = 'autoencoder_5G_model5.tf'
+model_name = 'autoencoder_5G_model15.tf'
 
-act1 = "relu"
-act2 = "linear"
-#act1 = act2 = LeakyReLU()
-encoder_constraint = decoder_constraint = None
+#act1 = "relu"
+#act2 = "linear"
+act1 = act2 = LeakyReLU()
+#encoder_constraint = decoder_constraint = None
 
-#encoder_constraint = UnitNorm(axis=0)
-#decoder_constraint = UnitNorm(axis=1)
+encoder_constraint = UnitNorm(axis=0)
+decoder_constraint = UnitNorm(axis=1)
 
 opt = tf.keras.optimizers.Adam()
 opt = tfa.optimizers.Lookahead(opt)
@@ -215,7 +215,7 @@ fig, ax = plt.subplots()
 for name, group in groups:
     ax.plot(group.index, group.Reconstruction_error, 
             marker='o', ms=3.5, linestyle='', 
-            label= "Malicious" if name == 1 else "Normal") 
+            label= "Anomaly" if name == 1 else "Normal") 
 ax.hlines(sd_threshold, ax.get_xlim()[0], ax.get_xlim()[1], colors="r", zorder=100, label='Threshold')
     
 ax.legend()

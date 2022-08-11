@@ -34,7 +34,7 @@ Constraints: Unit Norm
 Optimizer: Adam + Lookahead
 
 MODEL 8
-Actuvations: ReLU/Linear
+Activations: ReLU/Linear
 Constraints: Tied Weights + Unit Norm
 Optimizer: Adam + Lookahead
 
