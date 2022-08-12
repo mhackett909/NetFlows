@@ -179,12 +179,11 @@ plt.show()
 # Calculate threshold by accounting for standard deviation
 mean = np.mean(train_mae_loss, axis=0)
 sd = np.std(train_mae_loss, axis=0)
-num_sd = 2
+num_sd = 3 # 3 standard deviations is about 99.7% of data 
 
-# '2*sd' = ~97.5%, '1.76 = ~96%', '1.64 = ~95%'
 final_list = [x for x in train_mae_loss if (x > mean - num_sd * sd)] 
 final_list = [x for x in final_list if (x < mean + num_sd * sd)]
-print("max value after removing 2*std:", np.max(final_list))
+print("max value after removing 3*std:", np.max(final_list))
 sd_threshold = np.max(final_list)
 print("number of packets removed:", (len(train_mae_loss) - len(final_list)))
 print("number of packets before removal:", len(train_mae_loss))
