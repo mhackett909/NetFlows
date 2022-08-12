@@ -147,7 +147,12 @@ class Extractor:
             first_indices = self.subflow_indices[0]
             last_indices = self.subflow_indices[1]
             # Partition flows into subflows using indices
-            subflows = [] 
+            subflows = []
+            # For novel flow testing: Find suitable flows to designate as "novel"
+            # Use get_indices() to obtain number of subflows per flow
+            # List flow rows in novel_flows
+            novel_flows = [] 
+            novel_indices = []
             for i in range(len(new_keys)):
                 next_key = str(new_keys[i])
                 pkt_list = self.fid_dict[next_key] # Packets in this flow
@@ -157,7 +162,10 @@ class Extractor:
                     next_end = last_indices[i][j]
                     subflow = pkt_list.loc[next_start:next_end]
                     subflows.append(subflow)
+                    if i in novel_flows:
+                        novel_indices.append(len(subflows) - 1)
             self.subflows = subflows
+            self.novel_indices = novel_indices
     def partitionSubflowsByTimeout(self):
         subflow_indices = self.subflow_indices
         new_keys = self.new_keys
