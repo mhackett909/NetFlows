@@ -28,7 +28,7 @@ X_clean = X.loc[clean_indices]
 # In[2]:
 # Load best model and find threshold
 
-model_name = "autoencoder_5G_model1.tf"
+model_name = "autoencoder_5G_model16.tf"
 
 autoencoder = load_model(model_name)
 #autoencoder = load_model(model_name, custom_objects={"act1": LeakyReLU(), "act2": LeakyReLU()})
@@ -41,7 +41,7 @@ print("Reconstuction error threshold: ", threshold)
 # Calculate threshold by accounting for standard deviation
 mean = np.mean(clean_mae_loss, axis=0)
 sd = np.std(clean_mae_loss, axis=0)
-num_sd = 2
+num_sd = 3
 
 # '2*sd' = ~97.5%, '1.76 = ~96%', '1.64 = ~95%'
 final_list = [x for x in clean_mae_loss if (x > mean - num_sd * sd)] 
@@ -52,10 +52,10 @@ print("number of packets removed:", (len(clean_mae_loss) - len(final_list)))
 print("number of packets before removal:", len(clean_mae_loss))
 
 # In[3]:
-def generate_mal_subflows(num_mal, num_pkts, pkt_size):
+def generate_mal_subflows(num_mal, num_pkts, pkt_size, pkt_rand):
     mal_subflows = []
     for i in range(num_mal):
-        mal_subflows.append(mal_subflow(num_pkts, pkt_size))
+        mal_subflows.append(mal_subflow(num_pkts, pkt_size, pkt_rand))
     mal_subflows = pd.DataFrame(mal_subflows)
     X_clean['Anomaly'] = 0
     mal_subflows.columns = X_clean.columns
@@ -63,12 +63,14 @@ def generate_mal_subflows(num_mal, num_pkts, pkt_size):
     data = [X_clean, mal_subflows]
     return pd.concat(data).sample(frac=1)
 
-def mal_subflow(num_pkts, pkt_size):
+def mal_subflow(num_pkts, pkt_size, pkt_rand):
     mal_features = []
     dur = 5
     pkts_sec = num_pkts/dur
     mal_features.append(pkts_sec)
     # Simple ICMP flood with same size packets (bytes)
+    if pkt_rand:
+        pkt_size = np.random.randint(64, pkt_size)
     total_size = pkt_size * num_pkts
     total_size /= 1e6
     bits_sec = (total_size * 8)/dur
@@ -83,13 +85,14 @@ def mal_subflow(num_pkts, pkt_size):
     return pd.Series(mal_features)
 
 # THIS IS WHERE CUSTOM MAL SUBFLOWS ARE CREATED
-pkt_size = 5000 # 64 - 65,535 bytes (IPv4)
+pkt_size = 4000 # 64 - 65,535 bytes (IPv4)
+pkt_rand = True # Generate random packet sizes between 64 and pkt_size
 # Number of malicious subflows to generate
 num_mal = np.ceil(X_clean.shape[0] / 5).astype(int) # 20% of clean subflows
 # Packets per second should be high, at least 6000 
 num_pkts = np.random.randint(30000,35000) # Uses 5 second duration for calculation
 
-dirty_subflows = generate_mal_subflows(num_mal, num_pkts, pkt_size)
+dirty_subflows = generate_mal_subflows(num_mal, num_pkts, pkt_size, pkt_rand)
 X = dirty_subflows[features]
 y = dirty_subflows[target]
 
