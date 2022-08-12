@@ -5,12 +5,15 @@ import seaborn as sns
 from tensorflow.keras.layers import LeakyReLU
 from tensorflow.keras.models import load_model
 from sklearn.metrics import accuracy_score, confusion_matrix, recall_score, f1_score, precision_score
+from tensorflow_addons.optimizers import Lookahead
+from tensorflow.keras.optimizers import Adam
 
 # In[1]:
 # See 5G_Extractor.py
 print("Loading 5G Features...")
 
-path = '/smallwork/m.hackett_local/data/ashley_pcaps/captures/features/'
+#path = '/smallwork/m.hackett_local/data/ashley_pcaps/captures/features/'
+path = ""
 file = 'combined_5G_pcaps_features.csv'
 df = pd.read_csv(path+file)
 df.info()
@@ -28,10 +31,19 @@ X_clean = X.loc[clean_indices]
 # In[2]:
 # Load best model and find threshold
 
-model_name = "autoencoder_5G_model16.tf"
+model_name = "autoencoder_5G_model1.tf"
 
+# MODELS 1-4
 autoencoder = load_model(model_name)
+
+# MODELS 5-8
+#autoencoder = load_model(model_name, custom_objects={"opt":Lookahead(Adam())})
+
+# MODELS 9-12
 #autoencoder = load_model(model_name, custom_objects={"act1": LeakyReLU(), "act2": LeakyReLU()})
+
+# MODELS 13-16
+#autoencoder = load_model(model_name, custom_objects={"act1": LeakyReLU(), "act2": LeakyReLU(), "opt":Lookahead(Adam())})
 
 X_pred_clean = autoencoder.predict(X_clean)
 clean_mae_loss = np.mean(np.abs(X_pred_clean - X_clean), axis=1)
@@ -41,13 +53,12 @@ print("Reconstuction error threshold: ", threshold)
 # Calculate threshold by accounting for standard deviation
 mean = np.mean(clean_mae_loss, axis=0)
 sd = np.std(clean_mae_loss, axis=0)
-num_sd = 3
+num_sd = 3 # 3 standard deviations
 
-# '2*sd' = ~97.5%, '1.76 = ~96%', '1.64 = ~95%'
 final_list = [x for x in clean_mae_loss if (x > mean - num_sd * sd)] 
 final_list = [x for x in final_list if (x < mean + num_sd * sd)]
 sd_threshold = np.max(final_list)
-print("max value after removing 2*std:", sd_threshold)
+print("max value after removing 3*std:", sd_threshold)
 print("number of packets removed:", (len(clean_mae_loss) - len(final_list)))
 print("number of packets before removal:", len(clean_mae_loss))
 
