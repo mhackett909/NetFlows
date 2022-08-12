@@ -97,7 +97,8 @@ def mal_subflow(num_pkts, pkt_size, pkt_rand):
 
 # THIS IS WHERE CUSTOM MAL SUBFLOWS ARE CREATED
 pkt_size = 4000 # 64 - 65,535 bytes (IPv4)
-pkt_rand = True # Generate random packet sizes between 64 and pkt_size
+# Each subflow has different pkt_size (between 64 and pkt_size)
+pkt_rand = True # Note: Packet sizes are not randomized in each subflow
 # Number of malicious subflows to generate
 num_mal = np.ceil(X_clean.shape[0] / 5).astype(int) # 20% of clean subflows
 # Packets per second should be high, at least 6000 
