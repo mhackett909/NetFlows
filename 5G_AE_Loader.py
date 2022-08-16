@@ -12,9 +12,8 @@ from tensorflow.keras.optimizers import Adam
 # See 5G_Extractor.py
 print("Loading 5G Features...")
 
-#path = '/smallwork/m.hackett_local/data/ashley_pcaps/captures/features/'
-path = ""
-file = 'combined_5G_pcaps_features.csv'
+path = '/smallwork/m.hackett_local/data/ashley_pcaps/captures/features/'
+file = 'combined_5G_pcaps_features_test.csv'
 df = pd.read_csv(path+file)
 df.info()
 
@@ -31,10 +30,10 @@ X_clean = X.loc[clean_indices]
 # In[2]:
 # Load best model and find threshold
 
-model_name = "autoencoder_5G_model1.tf"
+model_name = "autoencoder_5G_model12_test.tf"
 
 # MODELS 1-4
-autoencoder = load_model(model_name)
+#autoencoder = load_model(model_name)
 
 # MODELS 5-8
 #autoencoder = load_model(model_name, custom_objects={"opt":Lookahead(Adam())})
@@ -43,7 +42,7 @@ autoencoder = load_model(model_name)
 #autoencoder = load_model(model_name, custom_objects={"act1": LeakyReLU(), "act2": LeakyReLU()})
 
 # MODELS 13-16
-#autoencoder = load_model(model_name, custom_objects={"act1": LeakyReLU(), "act2": LeakyReLU(), "opt":Lookahead(Adam())})
+autoencoder = load_model(model_name, custom_objects={"act1": LeakyReLU(), "act2": LeakyReLU(), "opt":Lookahead(Adam())})
 
 X_pred_clean = autoencoder.predict(X_clean)
 clean_mae_loss = np.mean(np.abs(X_pred_clean - X_clean), axis=1)
@@ -53,8 +52,9 @@ print("Reconstuction error threshold: ", threshold)
 # Calculate threshold by accounting for standard deviation
 mean = np.mean(clean_mae_loss, axis=0)
 sd = np.std(clean_mae_loss, axis=0)
-num_sd = 3 # 3 standard deviations
+num_sd = 3
 
+# '2*sd' = ~97.5%, '1.76 = ~96%', '1.64 = ~95%'
 final_list = [x for x in clean_mae_loss if (x > mean - num_sd * sd)] 
 final_list = [x for x in final_list if (x < mean + num_sd * sd)]
 sd_threshold = np.max(final_list)
@@ -158,3 +158,55 @@ print(" accuracy:  ", accuracy_score(error_df_test['True_class'], pred_y))
 print(" recall:    ", recall_score(error_df_test['True_class'], pred_y))
 print(" precision: ", precision_score(error_df_test['True_class'], pred_y))
 print(" f1-score:  ", f1_score(error_df_test['True_class'], pred_y))
+
+# In[5]:
+# Print commands
+def ae_stats(properties):
+    weight_index = 0
+    # Test if decoder is transposed or normal
+    decoder_test = len(autoencoder.layers[2].get_weights()[0])
+    if decoder_test == 10:
+        weight_index = 1
+    # Decoder weights
+    hdec_weights = autoencoder.layers[2].get_weights()[weight_index]
+    odec_weights = autoencoder.layers[3].get_weights()[weight_index]
+    # For dense transposed layers
+    if weight_index == 1: 
+        hdec_weights = hdec_weights.T 
+        odec_weights = odec_weights.T
+    if 'weights' in properties:
+        print('===Encoder weights===')
+        print("Hidden layer")
+        print(np.round(np.transpose(autoencoder.layers[0].get_weights()[0]), 3), end="\n\n")
+        print("Latent layer")
+        print(np.round(np.transpose(autoencoder.layers[1].get_weights()[0]), 3), end="\n\n")
+        print('===Decoder weights===')
+        print("Hidden layer 2")
+        print(np.round(hdec_weights, 3), end="\n\n")
+        print("Output layer")
+        print(np.round(odec_weights, 3), end="\n\n")
+    if 'norm' in properties:
+        print('Encoder weights norm')
+        w_encoder = np.round(autoencoder.layers[0].get_weights()[0], 2).T  # W in Figure 3.
+        print(np.round(np.sum(w_encoder ** 2, axis = 1),3), end="\n\n")
+        w_encoder = np.round(autoencoder.layers[1].get_weights()[0], 2).T  # W in Figure 3.
+        print(np.round(np.sum(w_encoder ** 2, axis = 1),3), end="\n\n")
+        print('Decoder weights norm')
+        w_decoder = np.round(hdec_weights, 2)  
+        print(np.round(np.sum(w_decoder ** 2, axis = 1),3), end="\n\n")
+        w_decoder = np.round(odec_weights, 2) 
+        print(np.round(np.sum(w_decoder ** 2, axis = 1),3), end="\n\n")
+    if 'ortho' in properties:
+        print('Encoder weights dot products')
+        w_encoder = autoencoder.layers[0].get_weights()[0]
+        print(np.round(np.dot(w_encoder, w_encoder.T), 2), end="\n\n")
+        w_encoder = autoencoder.layers[1].get_weights()[0]
+        print(np.round(np.dot(w_encoder.T, w_encoder), 2), end="\n\n")
+        print('Decoder weights dot product')
+        w_decoder = autoencoder.layers[2].get_weights()[weight_index]
+        print(np.round(np.dot(w_decoder.T, w_decoder), 2), end="\n\n")
+        w_decoder = autoencoder.layers[3].get_weights()[weight_index]
+        print(np.round(np.dot(w_decoder.T, w_decoder), 2), end="\n\n")
+# ['weights', 'norm', 'ortho']
+properties = ['weights', 'norm', 'ortho']
+ae_stats(properties)
