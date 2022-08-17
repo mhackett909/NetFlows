@@ -13,7 +13,7 @@ from tensorflow.keras.optimizers import Adam
 print("Loading 5G Features...")
 
 path = '/smallwork/m.hackett_local/data/ashley_pcaps/captures/features/'
-file = 'combined_5G_pcaps_features_test.csv'
+file = 'combined_5G_pcaps_features.csv'
 df = pd.read_csv(path+file)
 df.info()
 
@@ -30,10 +30,10 @@ X_clean = X.loc[clean_indices]
 # In[2]:
 # Load best model and find threshold
 
-model_name = "autoencoder_5G_model12_test.tf"
+model_name = "autoencoder_5G_model1.tf"
 
 # MODELS 1-4
-#autoencoder = load_model(model_name)
+autoencoder = load_model(model_name)
 
 # MODELS 5-8
 #autoencoder = load_model(model_name, custom_objects={"opt":Lookahead(Adam())})
@@ -42,7 +42,7 @@ model_name = "autoencoder_5G_model12_test.tf"
 #autoencoder = load_model(model_name, custom_objects={"act1": LeakyReLU(), "act2": LeakyReLU()})
 
 # MODELS 13-16
-autoencoder = load_model(model_name, custom_objects={"act1": LeakyReLU(), "act2": LeakyReLU(), "opt":Lookahead(Adam())})
+#autoencoder = load_model(model_name, custom_objects={"act1": LeakyReLU(), "act2": LeakyReLU(), "opt":Lookahead(Adam())})
 
 X_pred_clean = autoencoder.predict(X_clean)
 clean_mae_loss = np.mean(np.abs(X_pred_clean - X_clean), axis=1)
@@ -63,10 +63,10 @@ print("number of packets removed:", (len(clean_mae_loss) - len(final_list)))
 print("number of packets before removal:", len(clean_mae_loss))
 
 # In[3]:
-def generate_mal_subflows(num_mal, num_pkts, pkt_size, pkt_rand):
+def generate_mal_subflows(num_mal, pkts_sec, pkt_size, gradient):
     mal_subflows = []
     for i in range(num_mal):
-        mal_subflows.append(mal_subflow(num_pkts, pkt_size, pkt_rand))
+        mal_subflows.append(mal_subflow(pkts_sec, pkt_size, gradient))
     mal_subflows = pd.DataFrame(mal_subflows)
     X_clean['Anomaly'] = 0
     mal_subflows.columns = X_clean.columns
@@ -74,13 +74,13 @@ def generate_mal_subflows(num_mal, num_pkts, pkt_size, pkt_rand):
     data = [X_clean, mal_subflows]
     return pd.concat(data).sample(frac=1)
 
-def mal_subflow(num_pkts, pkt_size, pkt_rand):
+def mal_subflow(pkts_sec, pkt_size, gradient):
     mal_features = []
     dur = 5
-    pkts_sec = num_pkts/dur
+    num_pkts = pkts_sec * dur
     mal_features.append(pkts_sec)
     # Simple ICMP flood with same size packets (bytes)
-    if pkt_rand:
+    if gradient:
         pkt_size = np.random.randint(64, pkt_size)
     total_size = pkt_size * num_pkts
     total_size /= 1e6
@@ -95,16 +95,16 @@ def mal_subflow(num_pkts, pkt_size, pkt_rand):
     mal_features.append(1) # Mark as anomaly
     return pd.Series(mal_features)
 
-# THIS IS WHERE CUSTOM MAL SUBFLOWS ARE CREATED
-pkt_size = 4000 # 64 - 65,535 bytes (IPv4)
-# Each subflow has different pkt_size (between 64 and pkt_size)
-pkt_rand = True # Note: Packet sizes are not randomized in each subflow
+# Anomalous Flow Generation
+pkt_size = 4000 # 65,535 bytes max (IPv4)
+pkts_sec = 4000 # Packets per second should be high 
+# Generate each flow using different packet size (between 64 and pkt_size)
+# Note: Packet sizes are equal in each subflow, not randomized
+gradient = True 
 # Number of malicious subflows to generate
 num_mal = np.ceil(X_clean.shape[0] / 5).astype(int) # 20% of clean subflows
-# Packets per second should be high, at least 6000 
-num_pkts = np.random.randint(30000,35000) # Uses 5 second duration for calculation
 
-dirty_subflows = generate_mal_subflows(num_mal, num_pkts, pkt_size, pkt_rand)
+dirty_subflows = generate_mal_subflows(num_mal, pkts_sec, pkt_size, gradient)
 X = dirty_subflows[features]
 y = dirty_subflows[target]
 
