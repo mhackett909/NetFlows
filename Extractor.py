@@ -16,7 +16,7 @@ class Extractor:
                         'Pkt_Size_Min', 'Pkt_Size_Max', 'SYN_Sec', 'TTL_Avg', 'Anomaly']
     def getCSVFiles(self): 
         files = []
-        for file in os.listdir(path):
+        for file in os.listdir(self.path):
             ext = file[-3:]
             if ext == "csv":
                 files.append(file)
