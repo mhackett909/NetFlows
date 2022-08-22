@@ -23,17 +23,17 @@ target = ['Anomaly']
 X = df[features]
 y = df[target]
 
-# Remove original malicious subflows
+# Remove original malicious subflows (if any)
 clean_indices = y[y['Anomaly'] == 0].index
 X_clean = X.loc[clean_indices]
 
 # In[2]:
 
 # Anomaly Generator
-def generate_mal_subflows(num_mal, pkts_sec, pkt_size, gradient):
+def generate_mal_subflows(num_mal, pkts_sec, pkt_size_min, pkt_size_max, gradient):
     mal_subflows = []
     for i in range(num_mal):
-        mal_subflows.append(mal_subflow(pkts_sec, pkt_size, gradient))
+        mal_subflows.append(mal_subflow(pkts_sec, pkt_size_min, pkt_size_max, gradient))
     mal_subflows = pd.DataFrame(mal_subflows)
     X_clean['Anomaly'] = 0
     mal_subflows.columns = X_clean.columns
@@ -41,17 +41,18 @@ def generate_mal_subflows(num_mal, pkts_sec, pkt_size, gradient):
     data = [X_clean, mal_subflows]
     return pd.concat(data).sample(frac=1)
 
-def mal_subflow(pkts_sec, pkt_size, gradient):
+def mal_subflow(pkts_sec, pkt_size_min, pkt_size_max, gradient):
     mal_features = []
     dur = 5
     num_pkts = pkts_sec * dur
     mal_features.append(pkts_sec)
     # Simple ICMP flood with same size packets (bytes)
+    pkt_size = pkt_size_max
     if gradient:
-        pkt_size = np.random.randint(1000, pkt_size)
+        pkt_size = np.random.randint(pkt_size_min, pkt_size_max)
     total_size = pkt_size * num_pkts
-    total_size /= 1e6
-    bits_sec = (total_size * 8)/dur
+    total_size /= 1e6 # MB
+    bits_sec = (total_size * 8)/dur # bytes to bits
     mal_features.append(bits_sec)
     mal_features.append(pkt_size) 
     mal_features.append(0) # no standard deviation for uniform sizes
@@ -63,18 +64,25 @@ def mal_subflow(pkts_sec, pkt_size, gradient):
     return pd.Series(mal_features)
 
 # Anomalous Flow Generation
-pkt_size = 5000 # 65,535 bytes max (IPv4)
-# Generate each flow using different packet size (between 64 and pkt_size)
-# Note: Packet sizes are equal in each subflow, not randomized
-gradient = True 
-# Number of malicious subflows to generate
-num_mal = np.ceil(X_clean.shape[0] / 5).astype(int) # 20% of clean subflows
-# Packets per second should be high
+# Preset for experiments with combined_5G_pcaps_features.csv
+pkt_size_min = 1000
+pkt_size_max = 5000 # 65,535 bytes max (IPv4)
+
+# Average nominal: 1300 packets/sec
 pkts_sec = 3000
 
-dirty_subflows = generate_mal_subflows(num_mal, pkts_sec, pkt_size, gradient)
+# Number of malicious subflows to generate
+num_mal = np.ceil(X_clean.shape[0] / 5).astype(int) # 20% of clean subflows
+
+# Gradient generates each flow using packet size between min and max
+# Otherwise all packets are max size
+# Note: Packet sizes are always equal in each synthetic flow
+gradient = True 
+
+dirty_subflows = generate_mal_subflows(num_mal, pkts_sec, pkt_size_min, pkt_size_max, gradient)
 X = dirty_subflows[features]
 y = dirty_subflows[target]
+
 # In[3]:
 
 # Load best model and find threshold

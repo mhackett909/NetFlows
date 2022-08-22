@@ -14,15 +14,13 @@ class Extractor:
         self.bytes_convert = 1e3 if style=="kb" else 1e6
         self.feature_cols = ['Pkts_Per_Sec', self.bits_col, 'Pkt_Size_Avg', 'Pkt_Size_Std', 'Pkt_Size_Q1', 'Pkt_Size_Q2', 'Pkt_Size_Q3', 
                         'Pkt_Size_Min', 'Pkt_Size_Max', 'SYN_Sec', 'TTL_Avg', 'Anomaly']
-    def findCSVFiles(self): 
+    def getCSVFiles(self): 
         files = []
         for file in os.listdir(path):
             ext = file[-3:]
             if ext == "csv":
                 files.append(file)
-        self.files = files
-    def getCSVFiles(self):
-        return self.files
+        return files
     def getIndices(self):
         # Used to obtain number of subflows per flow
         return self.subflow_indices
@@ -95,7 +93,7 @@ class Extractor:
         else:  
             # Partition flows into fixed time intervals
             new_keys = self.new_keys
-            interval = 10 # Max subflow length in seconds (adjustable)
+            interval = 5 # Max subflow length in seconds (adjustable)
             # 2D lists contain starting and ending subflow indices for each flow
             first_indices  = [] 
             last_indices = [] 
@@ -243,40 +241,6 @@ class Extractor:
             subflow_features.append(sub_features)
         self.df_subflows = pd.DataFrame(subflow_features)
         self.df_subflows.columns = self.feature_cols
-    def generate_mal_subflows(self):
-        print("Generating malicious subflows...")
-        df_subflows = self.df_subflows
-        # Number of malicious subflows to generate
-        num_mal = np.ceil(df_subflows.shape[0] / 5).astype(int)
-        malicious_subflows = []
-        for i in range(num_mal):
-            malicious_subflows.append(self.mal_subflow())
-        malicious_subflows = pd.DataFrame(malicious_subflows)
-        malicious_subflows.columns = self.feature_cols
-        # Concatenate normal subflows and malicious subflows
-        data = [df_subflows, malicious_subflows]
-        self.df_subflows = pd.concat(data)
-    def mal_subflow(self):
-        mal_features = []
-        # Packets per second should be high, at least 6000
-        num_pkts = np.random.randint(30000,35000)
-        dur = 5
-        pkts_sec = num_pkts/dur
-        mal_features.append(pkts_sec)
-        # Simple ping flood with same size packets (bytes)
-        pkt_size = 5000 # 64-65,535 in IPv4
-        total_size = pkt_size * num_pkts
-        total_size /= self.bytes_convert
-        bits_sec = (total_size * 8)/dur
-        mal_features.append(bits_sec)
-        mal_features.append(pkt_size) 
-        mal_features.append(0) # no standard deviation for uniform sizes
-        for i in range(5):
-            mal_features.append(pkt_size)
-        mal_features.append(0) # No TCP flags for ICMP ping
-        mal_features.append(64) # Arbitrary TTL
-        mal_features.append(1) # Mark as anomaly
-        return pd.Series(mal_features)
     def shuffleSubflows(self):
         self.df_subflows = self.df_subflows.sample(frac=1)
     def featuresToCSV(self):
@@ -289,22 +253,17 @@ class Extractor:
         self.df_subflows.to_csv(path+file, encoding="utf-8", index=False)
         print(self.df_subflows.info(), end="\n\n")
 
-# Clean 5G (Ashley)
+# 5G PCAPs (CSV file)
 path = '/smallwork/m.hackett_local/data/ashley_pcaps/captures/csv/' 
 
-# MODBUS Testing
-#path = '/smallwork/m.hackett_local/data/modbus/clean/csv/' # Clean modbus
-#path = '/smallwork/m.hackett_local/data/modbus/pingFloodDDoS/csv/' # Attack modbus (ping flood)
-#path = '/smallwork/m.hackett_local/data/modbus/modbusQueryFlooding/csv/' # Attack modbus (query flood)
-#path = '/smallwork/m.hackett_local/data/modbus/tcpSYNFloodDDoS/csv/' # Attack modbus (syn flood)
-
 method = "timeout" #Options: "timeout" or "interval" (default)
+
 style = "mb" #Options: "kb" or "mb" (default)
-gen_malicious = True #Generate malicious subflows (5G data only)
-novel_flows = False # Need to finish implementing... need flow info function
+
+novel_flows = False # Need to finish implementing...
 
 extractor = Extractor(path, method, style)
-extractor.findCSVFiles()
+
 files = extractor.getCSVFiles()
 
 for file in files:
@@ -316,7 +275,5 @@ for file in files:
     extractor.findIndices()
     extractor.partitionSubflows()
     extractor.extractSubflowFeatures()
-    if gen_malicious:
-        extractor.generate_mal_subflows()
     extractor.shuffleSubflows()
     extractor.featuresToCSV()
