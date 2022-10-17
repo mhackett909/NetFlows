@@ -1,0 +1,28 @@
+***************FLOWS**************
+********PCAPS IN STORAGE DRIVE****
+#!/bin/bash
+echo Converting pcap_one...
+for i in {1..5}
+do
+        tshark -r pw1_$i -E header=y -E separator=, -E quote=d -E occurrence=f -T fields -e frame.time_epoch -e ip.len -e ip.proto -e ip.src -e ip.dst -e ip.ttl -e tcp.srcport -e tcp.dstport -e tcp.flags -e udp.srcport -e udp.dstport > pw1_$i.csv
+done
+
+echo Converting pcap_two...
+tshark -r pw2_1 -E header=y -E separator=, -E quote=d -E occurrence=f -T fields -e frame.time_epoch -e ip.len -e ip.proto -e ip.src -e ip.dst -e ip.ttl -e tcp.srcport -e tcp.dstport -e tcp.flags -e udp.srcport -e udp.dstport > combined_pw2.csv
+
+echo Converting pcap_tree...
+for i in {1..12}
+do
+        tshark -r pw3_$i -E header=y -E separator=, -E quote=d -E occurrence=f -T fields -e frame.time_epoch -e ip.len -e ip.proto -e ip.src -e ip.dst -e ip.ttl -e tcp.srcport -e tcp.dstport -e tcp.flags -e udp.srcport -e udp.dstport > pw3_$i.csv
+done
+
+cat pw1*.csv > combined_pw1.csv
+cat pw3*.csv > combined_pw3.csv
+cat combined*.csv > combined_5G_pcaps.csv
+
+rm pw*.csv
+rm combined_pw*.csv
+
+mkdir -p csv
+mv combined_5G_pcaps.csv csv
+**************************************
