@@ -68,7 +68,7 @@ def mal_subflow(pkts_sec, pkt_size_min, pkt_size_max, gradient):
 
 # Synthetic Flood Generation
 
-# Average nominal: 22.64 MBit/sec (@1427 packets/sec)
+# Average nominal: 21.59 MBit/sec (@1290 packets/sec)
 # Anomalies: 24 MBit/sec - 120 MBit/sec (@3000 packets/sec)
 pkts_sec = 3000
 pkt_size_min = 1000
@@ -90,7 +90,7 @@ y = dirty_subflows[target]
 
 # Load best model and find threshold
 # See models.txt
-model_name = "models\\autoencoder_5G_model_1_ddos.tf"
+model_name = "models\\autoencoder_5G_model_15_ddos.tf"
 
 autoencoder = load_model(model_name)
 
