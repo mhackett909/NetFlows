@@ -97,7 +97,7 @@ class Extractor:
             self.findIndicesByTimeout()
         else:  
             # Max subflow length in seconds (adjustable)
-            interval = 6
+            interval = 10
             # 2D List of tuples (start and end indices) for each flow's subflows
             subflow_indices = []
             for i in range(len(self.keys)):
@@ -211,7 +211,6 @@ class Extractor:
             sub_features.append(pkt_sizes.quantile(.75))
             sub_features.append(pkt_sizes.min())
             sub_features.append(pkt_sizes.max())
-            
             '''
             # TCP statistics
             tcp_flags = subflow['tcp.flags']
@@ -233,7 +232,6 @@ class Extractor:
             sub_features.append(ttl.min())
             sub_features.append(ttl.max())
             '''
-            
             # No anomalies in nominal data
             sub_features.append(0)
     
@@ -258,7 +256,7 @@ class Extractor:
 path = 'C:\\Users\\Michael\\Dropbox\\Backup\\Michael\\Shared\\Documents\\VTEC\\5G Code\\csv\\'
 file = 'combined_5G_pcaps.csv'
 
-method = "interval" #Options: "timeout" or "interval" (default/recommended)
+method = "timeout" #Options: "timeout" or "interval" (default/recommended)
 
 extractor = Extractor(path, file, method)
 
