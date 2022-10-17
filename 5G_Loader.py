@@ -52,9 +52,18 @@ def mal_subflow(pkts_sec, pkt_size_min, pkt_size_max, gradient):
     mal_features.append(0) # no standard deviation for uniform sizes
     for i in range(5):
         mal_features.append(pkt_size)
+    '''
+    # In an ICMP flood, TCP flags do not exist
+    for i in range(7):
+        mal_features.append(0)
+
+    # Using arbitrary TTL for all packets in the flow
+    mal_features.append(64)
+    mal_features.append(0)
+    for i in range(5):
+        mal_features.append(64)
+    '''
     mal_features.append(1) # Mark as anomaly
-    
-    # TODO: Need to generate anomalous TCP flags and TTL values
     return pd.Series(mal_features)
 
 # Synthetic Flood Generation
@@ -81,7 +90,7 @@ y = dirty_subflows[target]
 
 # Load best model and find threshold
 # See models.txt
-model_name = "models\\autoencoder_5G_model_8_ddos.tf"
+model_name = "models\\autoencoder_5G_model_1_ddos.tf"
 
 autoencoder = load_model(model_name)
 
