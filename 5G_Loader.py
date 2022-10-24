@@ -25,23 +25,23 @@ target = ['Anomaly']
 # Anomaly Generator
 def generate_mal_subflows(num_mal, pkts_sec, pkt_size_min, pkt_size_max, gradient):
     mal_subflows = []
+    step = np.floor((pkt_size_max - pkt_size_min) / num_mal) if gradient else 0
+    pkt_size = pkt_size_min
     for i in range(num_mal):
-        mal_subflows.append(mal_subflow(pkts_sec, pkt_size_min, pkt_size_max, gradient))
+        mal_subflows.append(mal_subflow(pkts_sec, pkt_size))
+        pkt_size += step
     mal_subflows = pd.DataFrame(mal_subflows)
     mal_subflows.columns = df.columns
     # Concatenate normal subflows and malicious subflows
     data = [df, mal_subflows]
     return pd.concat(data).sample(frac=1) # Shuffle and return
 
-def mal_subflow(pkts_sec, pkt_size_min, pkt_size_max, gradient):
+def mal_subflow(pkts_sec, pkt_size):
     mal_features = []
     dur = 6
     num_pkts = pkts_sec * dur
 
     # Simple ICMP flood with same size packets (bytes)
-    pkt_size = pkt_size_max
-    if gradient:
-        pkt_size = np.random.randint(pkt_size_min, pkt_size_max)
     total_size = pkt_size * num_pkts
     total_size /= 1e6 # MB
     bits_sec = (total_size * 8)/dur # MB to Mbit/s
@@ -78,9 +78,9 @@ pkt_size_max = 5000 # 65,535 bytes max (IPv4)
 num_mal = np.ceil(df.shape[0] / 5).astype(int) # 20% of clean subflows
 
 # Gradient generates each flow using packet size between min and max
-# Otherwise all packets are max size
+# Otherwise all packets are minimum size
 # Note: Packet sizes are always equal in each synthetic flow
-gradient = True 
+gradient = True
 
 dirty_subflows = generate_mal_subflows(num_mal, pkts_sec, pkt_size_min, pkt_size_max, gradient)
 X = dirty_subflows[features]
@@ -90,7 +90,7 @@ y = dirty_subflows[target]
 
 # Load best model and find threshold
 # See models.txt
-model_name = "models\\autoencoder_5G_model_15_ddos.tf"
+model_name = "models\\autoencoder_5G_model_2_ddos.tf"
 
 autoencoder = load_model(model_name)
 
@@ -119,7 +119,12 @@ print("number of packets before removal:", len(clean_mae_loss))
 # Graph depicts threshold line and location of normal and malicious data
 X_pred = autoencoder.predict(X) 
 test_mae_loss = np.mean(np.abs(X_pred - X), axis=1)
- 
+
+# TESTING ACCURACY OF MODEL
+accuracy = X_pred_clean / df[features]
+accuracy = accuracy * 100
+
+
 data = [test_mae_loss, y]
 error_df_test = pd.concat(data, axis=1)
 error_df_test.columns=['Reconstruction_error','True_class']
